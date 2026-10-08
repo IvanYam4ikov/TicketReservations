@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ticketing
+      POSTGRES_PASSWORD: ticketing
+      POSTGRES_DB: ticketing
+    command: ["postgres", "-c", "max_connections=200"]
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticketing -d ticketing"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://ticketing:ticketing@db:5432/ticketing
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["sh", "-c", "python -m ticketing.manage migrate && python -m ticketing.manage seed && uvicorn ticketing.main:app --host 0.0.0.0 --port 8000"]
+  test:
+    build: .
+    profiles: ["test"]
+    environment:
+      TEST_DATABASE_URL: postgresql://ticketing:ticketing@db:5432/ticketing
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["pytest", "-q"]
+volumes:
+  pgdata:
