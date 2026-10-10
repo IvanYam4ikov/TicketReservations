@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Front Row · Tickets</title><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script></head>
+<body>
+<header><a class="brand" href="/">FRONT ROW<span class="brand-dot">®</span></a><span class="tag">INDEPENDENT NIGHTS. UNFORGETTABLE SOUND.</span><a href="/docs">API docs ↗</a></header>
+<main>
+<div class="intro"><div><p class="eyebrow">YOUR NEXT / YOU HAD TO BE THERE</p><h1>LESS SCROLL.<br><span>MORE LIVE.</span></h1><p>The room. The sound. The moment. Get yourself a seat.</p></div><div class="intro-stamp"><span aria-hidden="true">↗</span><p>GET OFFLINE.<br>GET FRONT ROW.</p><small>LOCAL DEMO · NO REAL CHARGES</small></div></div>
+<div id="message" class="message" role="status" aria-live="polite" hidden></div>
+<div class="event-banner"><div class="poster-lines" aria-hidden="true"></div><div class="event-copy"><p class="eyebrow">THE LINEUP / NOW BOOKING</p><h2 id="event-title">Loading events…</h2><p id="event-date">Your next live experience</p></div><span class="banner-mark" aria-hidden="true">FR / 001</span></div>
+
+<div class="layout">
+<section class="main-panel" aria-label="Event and seats">
+<div class="event-picker"><label for="event">Choose an event</label><select id="event" disabled></select></div>
+<div class="map-heading"><div><p class="eyebrow">01 — THE FLOOR</p><h2>Choose your seats</h2></div><button id="refresh" class="text-button">Refresh availability ↻</button></div>
+<p class="muted">Select up to 10 seats. Availability refreshes every 5 seconds.</p>
+<div class="stage">↑ &nbsp; STAGE / THIS WAY &nbsp; ↑</div><div id="seats" class="seats" aria-label="Seat map"></div>
+<div class="legend"><span><i class="available"></i>Available</span><span><i class="selected"></i>Selected</span><span><i class="held"></i>Held</span><span><i class="sold"></i>Sold</span></div>
+<p class="map-note">Every seat is reserved individually. Your selection is secured when you place a hold.</p>
+</section>
+<aside class="summary"><p class="eyebrow">02 — ADMIT YOU</p><h2 id="summary-title">Make it yours.</h2><p id="summary-help" class="muted">Select seats on the map to get started.</p><div id="chosen" class="chosen"></div><div class="price"><span>Total</span><strong id="total">—</strong></div><div id="countdown-box" class="countdown" hidden><span>Your seats are held for</span><strong id="countdown">05:00</strong></div><button id="reserve" class="primary" disabled>Hold selected seats →</button>
+<div id="checkout-panel" hidden><label for="outcome">Simulated payment</label><select id="outcome"><option value="succeeded">Approve payment</option><option value="declined">Decline payment</option></select><button id="checkout" class="primary">Complete purchase →</button><p class="fine">Demo checkout. No card details or money required.</p></div>
+<button id="start-over" class="text-button" hidden>Choose more seats →</button><div id="receipt" hidden></div><p class="summary-foot">KEEP THIS FEELING.<br>KEEP YOUR TICKET.</p></aside>
+</div>
+<footer><span>FRONT ROW / A DATABASE ENGINEERING PROJECT</span><span>BUILT FOR THE MOMENT.</span></footer>
+</main></body></html>

@@ -96,3 +96,14 @@ def test_invalid_inputs_and_missing_resources(client):
     assert client.get(f"/events/{missing}/seats").status_code == 404
     assert client.get(f"/reservations/{missing}").status_code == 404
     assert client.get("/events/not-a-uuid/seats").status_code == 422
+
+
+def test_browser_interface_assets(client):
+    response = client.get('/')
+    assert response.status_code == 200
+    assert 'text/html' in response.headers['content-type']
+    assert '/static/app.js' in response.text
+    for path, expected in [('/static/app.js', 'Idempotency-Key'), ('/static/style.css', '@media')]:
+        asset = client.get(path)
+        assert asset.status_code == 200
+        assert expected in asset.text

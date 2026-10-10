@@ -1,9 +1,13 @@
 from datetime import timedelta
+from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 from ticketing.db import connect
+from ticketing.checkout import checkout_router
 
 
 class ReservationRequest(BaseModel):
@@ -19,7 +23,15 @@ class ReservationRequest(BaseModel):
 
 
 def create_app(database_url=None):
-    app = FastAPI(title="Ticket Reservations", version="0.1.0")
+    app = FastAPI(title="Ticket Reservations", version="0.3.0")
+
+    app.include_router(checkout_router(database_url))
+    static_dir = Path(__file__).resolve().parent / "static"
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+    @app.get("/", include_in_schema=False)
+    def home():
+        return FileResponse(static_dir / "index.html")
 
     @app.get("/health")
     def health():
@@ -39,9 +51,11 @@ def create_app(database_url=None):
                 raise HTTPException(404, "Event not found")
             return conn.execute(
                 """SELECT s.seat_number, s.price_cents,
-                CASE WHEN r.expires_at > statement_timestamp() THEN 'held'
+                CASE WHEN t.id IS NOT NULL THEN 'sold'
+                     WHEN r.expires_at > statement_timestamp() THEN 'held'
                      ELSE 'available' END AS status
                 FROM event_seats s LEFT JOIN reservations r ON r.id=s.reservation_id
+                LEFT JOIN tickets t ON t.event_id=s.event_id AND t.seat_number=s.seat_number
                 WHERE s.event_id=%s ORDER BY s.seat_number""", (event_id,),
             ).fetchall()
 
@@ -65,8 +79,12 @@ def create_app(database_url=None):
                 "SELECT 1 FROM reservations WHERE id=ANY(%s::uuid[]) AND expires_at>%s LIMIT 1",
                 ([s["reservation_id"] for s in seats if s["reservation_id"]], now),
             ).fetchone()
-            if active:
-                raise HTTPException(409, "One or more seats are already held")
+            sold = conn.execute(
+                "SELECT 1 FROM tickets WHERE event_id=%s AND seat_number=ANY(%s) LIMIT 1",
+                (body.event_id, body.seat_numbers),
+            ).fetchone()
+            if active or sold:
+                raise HTTPException(409, "One or more seats are already held or sold")
             reservation_id = uuid4()
             expires_at = now + timedelta(minutes=5)
             conn.execute(
@@ -91,7 +109,8 @@ def create_app(database_url=None):
     def reservation(reservation_id: UUID):
         with connect(database_url) as conn:
             row = conn.execute(
-                """SELECT *, CASE WHEN expires_at>statement_timestamp() THEN 'held'
+                """SELECT *, CASE WHEN EXISTS (SELECT 1 FROM orders WHERE reservation_id=reservations.id)
+                THEN 'confirmed' WHEN expires_at>statement_timestamp() THEN 'held'
                 ELSE 'expired' END AS status FROM reservations WHERE id=%s""", (reservation_id,),
             ).fetchone()
             if row is None:
