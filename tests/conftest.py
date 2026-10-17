@@ -7,6 +7,16 @@ from psycopg.conninfo import make_conninfo
 from ticketing.db import connect
 from ticketing.main import create_app
 from ticketing.manage import migrate, seed
+from ticketing.auth import COOKIE, hash_password, token_hash
+
+TEST_TOKEN = "integration-test-session-token"
+TEST_PASSWORD = "integration-password-123"
+TEST_EMAIL = "fixture@example.com"
+TEST_HASH = hash_password(TEST_PASSWORD)
+
+def signed_client(app, **kwargs):
+    return TestClient(app, headers={"X-Requested-With": "FrontRow"},
+                      cookies={COOKIE: TEST_TOKEN}, **kwargs)
 
 
 @pytest.fixture
@@ -21,6 +31,11 @@ def database_url():
     try:
         migrate(url)
         seed(url)
+        with connect(url) as conn:
+            user = conn.execute("INSERT INTO users (id,email,password_hash) VALUES (%s,%s,%s) RETURNING id",
+                                (uuid4(), TEST_EMAIL, TEST_HASH)).fetchone()
+            conn.execute("INSERT INTO sessions (token_hash,user_id,expires_at) VALUES (%s,%s,clock_timestamp()+interval '1 day')",
+                         (token_hash(TEST_TOKEN), user['id']))
         yield url
     finally:
         with connect(base) as conn:
@@ -29,5 +44,5 @@ def database_url():
 
 @pytest.fixture
 def client(database_url):
-    with TestClient(create_app(database_url)) as client:
+    with signed_client(create_app(database_url)) as client:
         yield client

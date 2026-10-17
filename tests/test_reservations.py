@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from uuid import uuid4
 
-from fastapi.testclient import TestClient
+from conftest import signed_client
 from ticketing.db import connect
 from ticketing.main import create_app
 from ticketing.manage import DEMO_EVENT_ID, migrate, seed
@@ -17,7 +17,7 @@ def race(database_url, requests):
     app = create_app(database_url)
 
     def book(seats):
-        with TestClient(app) as client:
+        with signed_client(app) as client:
             barrier.wait(timeout=30)
             return client.post("/reservations", json=payload(seats))
 

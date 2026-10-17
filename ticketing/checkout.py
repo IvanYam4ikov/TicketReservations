@@ -2,7 +2,7 @@
 from typing import Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from ticketing.db import connect
@@ -12,8 +12,8 @@ class CheckoutRequest(BaseModel):
     payment_outcome: Literal["succeeded", "declined"] = "succeeded"
 
 
-def read_order(conn, order_id):
-    order = conn.execute("SELECT * FROM orders WHERE id=%s", (order_id,)).fetchone()
+def read_order(conn, order_id, user_id):
+    order = conn.execute("SELECT * FROM orders WHERE id=%s AND user_id=%s", (order_id, user_id)).fetchone()
     if order is None:
         raise HTTPException(404, "Order not found")
     order["tickets"] = conn.execute(
@@ -28,36 +28,37 @@ def declined():
     return JSONResponse(status_code=402, content={"detail": "Simulated payment declined"})
 
 
-def checkout_router(database_url=None):
+def checkout_router(database_url, current_user):
     router = APIRouter()
 
     @router.get("/orders/{order_id}")
-    def get_order(order_id: UUID):
+    def get_order(order_id: UUID, user=Depends(current_user)):
         with connect(database_url) as conn:
-            return read_order(conn, order_id)
+            return read_order(conn, order_id, user["id"])
 
     @router.post("/reservations/{reservation_id}/checkout")
     def checkout(reservation_id: UUID, body: CheckoutRequest,
-                 idempotency_key: UUID = Header()):
+                 idempotency_key: UUID = Header(), user=Depends(current_user)):
         with connect(database_url) as conn:
+            # Check ownership before reading or replaying an attempt.
+            reservation = conn.execute(
+                "SELECT * FROM reservations WHERE id=%s AND user_id=%s", (reservation_id, user["id"]),
+            ).fetchone()
+            if reservation is None:
+                raise HTTPException(404, "Reservation not found")
             # Serialize this key before taking inventory locks. Hash collisions only
             # cause extra waiting; the actual UUID remains the unique database key.
             conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
-                         (str(idempotency_key),))
+                         (str(user["id"]) + ":" + str(idempotency_key),))
             attempt = conn.execute(
-                "SELECT * FROM checkout_attempts WHERE idempotency_key=%s", (idempotency_key,),
+                "SELECT * FROM checkout_attempts WHERE user_id=%s AND idempotency_key=%s", (user["id"], idempotency_key),
             ).fetchone()
             if attempt:
                 if (attempt["reservation_id"] != reservation_id
                         or attempt["payment_outcome"] != body.payment_outcome):
                     raise HTTPException(409, "Idempotency key already used for a different request")
-                return read_order(conn, attempt["order_id"]) if attempt["order_id"] else declined()
+                return read_order(conn, attempt["order_id"], user["id"]) if attempt["order_id"] else declined()
 
-            reservation = conn.execute(
-                "SELECT * FROM reservations WHERE id=%s", (reservation_id,),
-            ).fetchone()
-            if reservation is None:
-                raise HTTPException(404, "Reservation not found")
             items = conn.execute(
                 "SELECT * FROM reservation_items WHERE reservation_id=%s ORDER BY seat_number",
                 (reservation_id,),
@@ -82,10 +83,10 @@ def checkout_router(database_url=None):
                 currency = conn.execute("SELECT currency FROM events WHERE id=%s",
                                         (reservation["event_id"],)).fetchone()["currency"]
                 conn.execute(
-                    """INSERT INTO orders (id, reservation_id, event_id, total_price_cents, currency)
-                    VALUES (%s,%s,%s,%s,%s)""",
+                    """INSERT INTO orders (id, reservation_id, event_id, total_price_cents, currency, user_id)
+                    VALUES (%s,%s,%s,%s,%s,%s)""",
                     (order_id, reservation_id, reservation["event_id"],
-                     sum(i["price_cents"] for i in items), currency),
+                     sum(i["price_cents"] for i in items), currency, user["id"]),
                 )
                 for item in items:
                     conn.execute(
@@ -95,10 +96,10 @@ def checkout_router(database_url=None):
                          item["seat_number"], item["price_cents"]),
                     )
             conn.execute(
-                """INSERT INTO checkout_attempts (idempotency_key, reservation_id, payment_outcome, order_id)
-                VALUES (%s,%s,%s,%s)""",
-                (idempotency_key, reservation_id, body.payment_outcome, order_id),
+                """INSERT INTO checkout_attempts (idempotency_key, reservation_id, payment_outcome, order_id, user_id)
+                VALUES (%s,%s,%s,%s,%s)""",
+                (idempotency_key, reservation_id, body.payment_outcome, order_id, user["id"]),
             )
-            return read_order(conn, order_id) if order_id else declined()
+            return read_order(conn, order_id, user["id"]) if order_id else declined()
 
     return router

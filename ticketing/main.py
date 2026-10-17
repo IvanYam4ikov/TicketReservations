@@ -2,12 +2,14 @@ from datetime import timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 from ticketing.db import connect
 from ticketing.checkout import checkout_router
+from ticketing.auth import auth_router, protect_mutation, user_dependency
+from ticketing.history import history_router
 
 
 class ReservationRequest(BaseModel):
@@ -23,9 +25,19 @@ class ReservationRequest(BaseModel):
 
 
 def create_app(database_url=None):
-    app = FastAPI(title="Ticket Reservations", version="0.3.0")
+    app = FastAPI(title="Ticket Reservations", version="0.4.0", dependencies=[Depends(protect_mutation)])
 
-    app.include_router(checkout_router(database_url))
+    current_user = user_dependency(database_url)
+    app.include_router(auth_router(database_url, current_user))
+    app.include_router(checkout_router(database_url, current_user))
+    app.include_router(history_router(database_url, current_user))
+
+    @app.middleware("http")
+    async def private_responses(request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith(("/auth/", "/me/", "/reservations", "/orders/")):
+            response.headers["Cache-Control"] = "no-store"
+        return response
     static_dir = Path(__file__).resolve().parent / "static"
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -60,7 +72,7 @@ def create_app(database_url=None):
             ).fetchall()
 
     @app.post("/reservations", status_code=201)
-    def reserve(body: ReservationRequest):
+    def reserve(body: ReservationRequest, user=Depends(current_user)):
         with connect(database_url) as conn:
             if not conn.execute("SELECT 1 FROM events WHERE id=%s", (body.event_id,)).fetchone():
                 raise HTTPException(404, "Event not found")
@@ -88,8 +100,8 @@ def create_app(database_url=None):
             reservation_id = uuid4()
             expires_at = now + timedelta(minutes=5)
             conn.execute(
-                "INSERT INTO reservations (id, event_id, created_at, expires_at) VALUES (%s,%s,%s,%s)",
-                (reservation_id, body.event_id, now, expires_at),
+                "INSERT INTO reservations (id, event_id, created_at, expires_at, user_id) VALUES (%s,%s,%s,%s,%s)",
+                (reservation_id, body.event_id, now, expires_at, user["id"]),
             )
             conn.execute(
                 "UPDATE event_seats SET reservation_id=%s WHERE event_id=%s AND seat_number=ANY(%s)",
@@ -106,12 +118,12 @@ def create_app(database_url=None):
                 "total_price_cents": sum(s["price_cents"] for s in seats)}
 
     @app.get("/reservations/{reservation_id}")
-    def reservation(reservation_id: UUID):
+    def reservation(reservation_id: UUID, user=Depends(current_user)):
         with connect(database_url) as conn:
             row = conn.execute(
                 """SELECT *, CASE WHEN EXISTS (SELECT 1 FROM orders WHERE reservation_id=reservations.id)
                 THEN 'confirmed' WHEN expires_at>statement_timestamp() THEN 'held'
-                ELSE 'expired' END AS status FROM reservations WHERE id=%s""", (reservation_id,),
+                ELSE 'expired' END AS status FROM reservations WHERE id=%s AND user_id=%s""", (reservation_id, user["id"]),
             ).fetchone()
             if row is None:
                 raise HTTPException(404, "Reservation not found")

@@ -2,10 +2,15 @@
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Front Row · Tickets</title><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script></head>
 <body>
-<header><a class="brand" href="/">FRONT ROW<span class="brand-dot">®</span></a><span class="tag">INDEPENDENT NIGHTS. UNFORGETTABLE SOUND.</span><a href="/docs">API docs ↗</a></header>
+<header><a class="brand" href="/">FRONT ROW<span class="brand-dot">®</span></a><span class="tag">INDEPENDENT NIGHTS. UNFORGETTABLE SOUND.</span><nav class="account-nav" aria-label="Account"><span id="account-email"></span><button id="account-toggle" class="text-button">Sign in / Register</button><button id="tickets-toggle" class="text-button" hidden>My Tickets</button><button id="logout" class="text-button" hidden>Sign out</button><a href="/docs">API docs ↗</a></nav></header>
 <main>
 <div class="intro"><div><p class="eyebrow">YOUR NEXT / YOU HAD TO BE THERE</p><h1>LESS SCROLL.<br><span>MORE LIVE.</span></h1><p>The room. The sound. The moment. Get yourself a seat.</p></div><div class="intro-stamp"><span aria-hidden="true">↗</span><p>GET OFFLINE.<br>GET FRONT ROW.</p><small>LOCAL DEMO · NO REAL CHARGES</small></div></div>
 <div id="message" class="message" role="status" aria-live="polite" hidden></div>
+<section id="auth-panel" class="account-panel" aria-labelledby="auth-title" hidden>
+<div><p class="eyebrow">YOUR ACCOUNT / YOUR NIGHTS</p><h2 id="auth-title">Sign in.</h2><p class="muted">Keep your tickets and reservations across visits.</p></div>
+<form id="auth-form"><label for="auth-email">Email</label><input id="auth-email" type="email" autocomplete="username" maxlength="254" required><label for="auth-password">Password</label><input id="auth-password" type="password" autocomplete="current-password" minlength="12" maxlength="128" required aria-describedby="password-help"><p id="password-help" class="fine">Use 12–128 characters. Demo accounts have no email verification or password reset.</p><button id="auth-submit" class="primary" type="submit">Sign in</button><button id="auth-switch" class="text-button" type="button">New here? Create an account</button><p id="auth-error" role="alert"></p></form>
+</section>
+<section id="history-panel" class="history-panel" aria-labelledby="history-title" hidden><div class="map-heading"><div><p class="eyebrow">YOUR ACCOUNT / SAVED IN THE DATABASE</p><h2 id="history-title">My Tickets</h2></div><button id="history-close" class="text-button">Back to booking</button></div><div class="history-tabs"><button id="history-orders" class="text-button" aria-pressed="true">Purchased tickets</button><button id="history-reservations" class="text-button" aria-pressed="false">Reservations</button><button id="history-refresh" class="text-button">Refresh</button></div><p id="history-status" role="status" aria-live="polite"></p><div id="history-list"></div><button id="history-more" class="text-button" hidden>Load more</button></section>
 <div class="event-banner"><div class="poster-lines" aria-hidden="true"></div><div class="event-copy"><p class="eyebrow">THE LINEUP / NOW BOOKING</p><h2 id="event-title">Loading events…</h2><p id="event-date">Your next live experience</p></div><span class="banner-mark" aria-hidden="true">FR / 001</span></div>
 
 <div class="layout">

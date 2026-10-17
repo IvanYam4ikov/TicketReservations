@@ -4,7 +4,7 @@ import time
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
+from conftest import signed_client
 from psycopg import errors
 from psycopg.conninfo import make_conninfo
 from ticketing.db import connect
@@ -59,7 +59,7 @@ def test_concurrent_checkout_once(client, database_url, same_key):
     barrier = Barrier(20)
 
     def attempt(_):
-        with TestClient(create_app(database_url)) as c:
+        with signed_client(create_app(database_url)) as c:
             barrier.wait(timeout=15)
             return buy(c, reservation, shared_key if same_key else uuid4())
 
@@ -118,7 +118,7 @@ def test_checkout_rechecks_time_after_waiting_for_seat_lock(client, database_url
         locker.execute('SELECT * FROM event_seats WHERE seat_number=1 FOR UPDATE')
 
         def checkout():
-            with TestClient(create_app(race_url)) as c:
+            with signed_client(create_app(race_url)) as c:
                 return buy(c, reservation)
 
         future = pool.submit(checkout)
@@ -153,7 +153,7 @@ def test_failure_during_ticket_issue_rolls_back_entire_checkout(client, database
         CREATE TRIGGER reject_ticket BEFORE INSERT ON tickets
         FOR EACH ROW EXECUTE FUNCTION reject_second_ticket();""")
     key = uuid4()
-    with TestClient(create_app(database_url), raise_server_exceptions=False) as c:
+    with signed_client(create_app(database_url), raise_server_exceptions=False) as c:
         assert buy(c, reservation, key).status_code == 500
     with connect(database_url) as conn:
         for table in ('orders', 'tickets', 'checkout_attempts'):
@@ -185,12 +185,12 @@ def test_expired_checkout_races_with_reassignment(client, database_url):
     barrier = Barrier(2)
 
     def checkout_old():
-        with TestClient(create_app(database_url)) as c:
+        with signed_client(create_app(database_url)) as c:
             barrier.wait(timeout=10)
             return buy(c, old)
 
     def reassign():
-        with TestClient(create_app(database_url)) as c:
+        with signed_client(create_app(database_url)) as c:
             barrier.wait(timeout=10)
             return hold(c, [1])
 
